@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROCKER 学员管理系统</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f5f7;color:#20242c;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+header{background:#17191e;color:white;padding:24px 20px}
+header small{color:#b8bdc8;letter-spacing:3px}
+header h1{margin:8px 0;font-size:27px}
+header p{color:#c5c9d1;font-size:13px}
+main{max-width:900px;margin:auto;padding:18px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.card,.panel{background:white;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:14px}
+.stats strong{display:block;font-size:25px;margin-top:8px}
+h2{font-size:18px;margin:0 0 14px}
+label{display:block;font-size:13px;color:#626875;margin:10px 0 6px}
+input,select,textarea{width:100%;padding:12px;border:1px solid #d9dde4;border-radius:9px;font-size:15px;background:white}
+button{border:0;border-radius:9px;padding:12px 15px;font-size:14px;cursor:pointer}
+.primary{background:#17191e;color:white;width:100%;margin-top:14px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions button{background:#eceef2}
+.student{border-top:1px solid #eceef2;padding:14px 0}
+.student strong{font-size:16px}
+.muted{color:#737987;font-size:13px;margin-top:6px;line-height:1.7}
+.tag{display:inline-block;background:#edf5ee;color:#24743b;padding:4px 8px;border-radius:6px;font-size:12px;margin-top:7px}
+.empty{color:#858b96;text-align:center;padding:20px 0}
+.notice{font-size:12px;color:#747b88;line-height:1.7}
+@media(min-width:600px){.stats{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<header>
+<small>ROCKER MODERN MUSIC</small>
+<h1>学员管理系统</h1>
+<p>把每一节课教好，把每一份成长记录下来。</p>
+</header>
+<main>
+<div class="stats">
+<div class="card">学员总数<strong id="total">0</strong></div>
+<div class="card">剩余总课时<strong id="hours">0</strong></div>
+<div class="card">累计收款<strong id="income">¥0</strong></div>
+<div class="card">待续费学员<strong id="renew">0</strong></div>
+</div>
+<section class="panel">
+<h2>＋ 添加学员</h2>
+<form id="form">
+<label>学员姓名 *</label>
+<input id="name" required placeholder="请输入姓名">
+<label>联系电话</label>
+<input id="phone" placeholder="家长或学员电话" inputmode="tel">
+<label>学习乐器</label>
+<select id="instrument">
+<option>电吉他</option><option>木吉他</option><option>贝斯</option>
+</select>
+<label>购买课时</label>
+<input id="lessons" type="number" min="1" value="16" required>
+<label>实收金额（元）</label>
+<input id="paid" type="number" min="0" step="0.01" value="1688" required>
+<label>备注</label>
+<textarea id="note" rows="2" placeholder="上课时间、学习目标等"></textarea>
+<button class="primary" type="submit">保存学员档案</button>
+</form>
+</section>
+<section class="panel">
+<h2>学员名单</h2>
+<div id="list"><div class="empty">暂时还没有学员，请先添加。</div></div>
+</section>
+<p class="notice">数据目前保存在当前浏览器中。请勿在此测试版录入敏感个人信息；清理浏览器数据或更换设备可能导致数据丢失。正式使用前需要配置可靠的数据存储和备份。</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let students=[];
+try{students=JSON.parse(localStorage.getItem('rocker_students')||'[]')}catch(e){}
+function save(){localStorage.setItem('rocker_students',JSON.stringify(students));render()}
+function render(){
+$('total').textContent=students.length;
+$('hours').textContent=students.reduce((s,x)=>s+x.remaining,0);
+$('income').textContent='¥'+students.reduce((s,x)=>s+x.paid,0).toLocaleString('zh-CN',{maximumFractionDigits:2});
+$('renew').textContent=students.filter(x=>x.remaining<=4).length;
+$('list').innerHTML='';
+if(!students.length){$('list').innerHTML='<div class="empty">暂时还没有学员，请先添加。</div>';return}
+students.forEach((x,i)=>{
+const div=document.createElement('div');div.className='student';
+const title=document.createElement('strong');title.textContent=x.name+' · '+x.instrument;div.appendChild(title);
+const info=document.createElement('div');info.className='muted';info.textContent='电话：'+(x.phone||'未填写')+'｜剩余课时：'+x.remaining+'｜实收：¥'+x.paid;div.appendChild(info);
+if(x.remaining<=4){const tag=document.createElement('span');tag.className='tag';tag.textContent='课时不足，请关注续费';div.appendChild(tag)}
+const actions=document.createElement('div');actions.className='actions';actions.style.marginTop='10px';
+[['登记上课',()=>{if(x.remaining<1){alert('剩余课时不足，请先续费');return}if(confirm('确认登记 '+x.name+' 上课一次？将扣减 1 课时。')){x.remaining--;x.used++;save()}}],['续费加课',()=>{const n=Number(prompt('请输入增加的课时数','16'));if(!Number.isInteger(n)||n<=0)return;const p=Number(prompt('请输入本次实收金额（元）','1688'));if(!Number.isFinite(p)||p<0)return;x.remaining+=n;x.paid+=p;save()}],['删除',()=>{if(confirm('确定删除学员 '+x.name+' 的档案？此操作无法撤销。')){students.splice(i,1);save()}}]].forEach(([text,fn])=>{const b=document.createElement('button');b.textContent=text;b.type='button';b.onclick=fn;actions.appendChild(b)});
+div.appendChild(actions);$('list').appendChild(div);
+});
+}
+$('form').addEventListener('submit',e=>{
+e.preventDefault();
+const name=$('name').value.trim();const lessons=Number($('lessons').value);const paid=Number($('paid').value);
+if(!name||!Number.isInteger(lessons)||lessons<1||!Number.isFinite(paid)||paid<0){alert('请检查姓名、课时和收费金额');return}
+students.push({name,phone:$('phone').value.trim(),instrument:$('instrument').value,remaining:lessons,used:0,paid,note:$('note').value.trim()});
+save();e.target.reset();$('lessons').value=16;$('paid').value=1688;alert('学员已保存');
+});
+render();
+</script>
+</body>
+</html>
