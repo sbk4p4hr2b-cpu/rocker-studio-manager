@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROCKER 数据备份</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f4f5f7;color:#20242c;padding:20px;max-width:600px;margin:auto}
+section{background:white;padding:20px;border-radius:14px;margin:16px 0}
+button{padding:13px 16px;border:0;border-radius:9px;background:#17191e;color:white;font-size:16px;margin:8px 0;width:100%}
+p{font-size:14px;line-height:1.8;color:#606774}
+input{margin:12px 0;max-width:100%}
+</style>
+</head>
+<body>
+<h1>ROCKER 数据备份</h1>
+<p>ROCKER 现代音乐教室 · 学员管理系统</p>
+
+<section>
+<h2>导出备份</h2>
+<p>将当前浏览器保存的学员数据导出为 JSON 文件，请妥善保管。</p>
+<button id="export">导出学员数据</button>
+</section>
+
+<section>
+<h2>恢复备份</h2>
+<p>选择之前导出的 JSON 文件。恢复操作会覆盖当前浏览器里的学员数据，建议先导出当前数据。</p>
+<input id="file" type="file" accept=".json,application/json">
+<button id="restore">恢复学员数据</button>
+</section>
+
+<p>注意：本页面只能读取同一网站、同一浏览器中的数据。它不是云端数据库，也不能自动同步其他设备。</p>
+
+<script>
+const KEY='rocker_students';
+
+document.getElementById('export').onclick=()=>{
+  const data=localStorage.getItem(KEY);
+  if(data===null){
+    alert('当前浏览器没有找到学员数据。请确认你曾在这个网站添加过学员。');
+    return;
+  }
+  let students;
+  try{students=JSON.parse(data)}catch(e){
+    alert('数据格式异常，暂时无法导出。');return;
+  }
+  const blob=new Blob([JSON.stringify(students,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='ROCKER学员备份_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+};
+
+document.getElementById('restore').onclick=async()=>{
+  const input=document.getElementById('file');
+  const file=input.files[0];
+  if(!file){alert('请先选择备份 JSON 文件。');return}
+  try{
+    const data=JSON.parse(await file.text());
+    if(!Array.isArray(data)||!data.every(x=>
+      x&&typeof x.name==='string'&&
+      Number.isFinite(Number(x.remaining))&&Number(x.remaining)>=0
+    )){
+      throw new Error('格式错误');
+    }
+    if(!confirm('恢复将替换当前全部学员数据。确定继续吗？'))return;
+    localStorage.setItem(KEY,JSON.stringify(data));
+    alert('恢复成功！请返回学员管理系统并刷新页面。');
+  }catch(e){
+    alert('恢复失败：请选择本系统导出的有效备份文件。');
+  }
+};
+</script>
+</body>
+</html>
