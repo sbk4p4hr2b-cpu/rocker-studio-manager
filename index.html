@@ -3,7 +3,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ROCKER 学员管理系统</title>
 <style>
 *{box-sizing:border-box}
@@ -21,14 +21,19 @@ label{display:block;font-size:13px;color:#626875;margin:10px 0 6px}
 input,select,textarea{width:100%;padding:12px;border:1px solid #d9dde4;border-radius:9px;font-size:15px;background:white}
 button{border:0;border-radius:9px;padding:12px 15px;font-size:14px;cursor:pointer}
 .primary{background:#17191e;color:white;width:100%;margin-top:14px}
-.actions{display:flex;gap:8px;flex-wrap:wrap}
-.actions button{background:#eceef2}
+.actions,.backup-actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions{margin-top:10px}
+.actions button,.backup-actions button{background:#eceef2}
 .student{border-top:1px solid #eceef2;padding:14px 0}
 .student strong{font-size:16px}
-.muted{color:#737987;font-size:13px;margin-top:6px;line-height:1.7}
+.muted{color:#737987;font-size:13px;margin-top:6px;line-height:1.7;overflow-wrap:anywhere}
 .tag{display:inline-block;background:#edf5ee;color:#24743b;padding:4px 8px;border-radius:6px;font-size:12px;margin-top:7px}
-.empty{color:#858b96;text-align:center;padding:20px 0}
+.empty,.history-empty{color:#858b96;text-align:center;padding:15px 0}
 .notice{font-size:12px;color:#747b88;line-height:1.7}
+.history{margin-top:12px;border-top:1px dashed #e5e7eb;padding-top:8px}
+.history summary{cursor:pointer;color:#454b56;font-size:14px;padding:6px 0}
+.history-item{background:#f7f8fa;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.history-date{font-weight:600}
 @media(min-width:600px){.stats{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
@@ -45,6 +50,7 @@ button{border:0;border-radius:9px;padding:12px 15px;font-size:14px;cursor:pointe
 <div class="card">累计收款<strong id="income">¥0</strong></div>
 <div class="card">待续费学员<strong id="renew">0</strong></div>
 </div>
+
 <section class="panel">
 <h2>＋ 添加学员</h2>
 <form id="form">
@@ -65,40 +71,229 @@ button{border:0;border-radius:9px;padding:12px 15px;font-size:14px;cursor:pointe
 <button class="primary" type="submit">保存学员档案</button>
 </form>
 </section>
+
+<section class="panel">
+<h2>数据备份与恢复</h2>
+<div class="backup-actions">
+<button type="button" id="exportBtn">导出备份</button>
+<button type="button" id="importBtn">导入/恢复备份</button>
+<input type="file" id="backupFile" accept=".json,application/json" hidden>
+</div>
+<p class="notice">恢复备份会替换当前浏览器中的学员数据。请先导出当前数据，以免丢失新增内容。</p>
+</section>
+
 <section class="panel">
 <h2>学员名单</h2>
 <div id="list"><div class="empty">暂时还没有学员，请先添加。</div></div>
 </section>
-<p class="notice">数据目前保存在当前浏览器中。请勿在此测试版录入敏感个人信息；清理浏览器数据或更换设备可能导致数据丢失。正式使用前需要配置可靠的数据存储和备份。</p>
+<p class="notice">测试版数据保存在当前浏览器中。请定期导出备份。公开网站不应存放敏感学员信息；正式使用前应进一步完善访问控制和数据安全。</p>
 </main>
+
 <script>
 const $=id=>document.getElementById(id);
+const STORAGE_KEY='rocker_students';
 let students=[];
-try{students=JSON.parse(localStorage.getItem('rocker_students')||'[]')}catch(e){}
-function save(){localStorage.setItem('rocker_students',JSON.stringify(students));render()}
-function render(){
-$('total').textContent=students.length;
-$('hours').textContent=students.reduce((s,x)=>s+x.remaining,0);
-$('income').textContent='¥'+students.reduce((s,x)=>s+x.paid,0).toLocaleString('zh-CN',{maximumFractionDigits:2});
-$('renew').textContent=students.filter(x=>x.remaining<=4).length;
-$('list').innerHTML='';
-if(!students.length){$('list').innerHTML='<div class="empty">暂时还没有学员，请先添加。</div>';return}
-students.forEach((x,i)=>{
-const div=document.createElement('div');div.className='student';
-const title=document.createElement('strong');title.textContent=x.name+' · '+x.instrument;div.appendChild(title);
-const info=document.createElement('div');info.className='muted';info.textContent='电话：'+(x.phone||'未填写')+'｜剩余课时：'+x.remaining+'｜实收：¥'+x.paid;div.appendChild(info);
-if(x.remaining<=4){const tag=document.createElement('span');tag.className='tag';tag.textContent='课时不足，请关注续费';div.appendChild(tag)}
-const actions=document.createElement('div');actions.className='actions';actions.style.marginTop='10px';
-[['登记上课',()=>{if(x.remaining<1){alert('剩余课时不足，请先续费');return}if(confirm('确认登记 '+x.name+' 上课一次？将扣减 1 课时。')){x.remaining--;x.used++;save()}}],['续费加课',()=>{const n=Number(prompt('请输入增加的课时数','16'));if(!Number.isInteger(n)||n<=0)return;const p=Number(prompt('请输入本次实收金额（元）','1688'));if(!Number.isFinite(p)||p<0)return;x.remaining+=n;x.paid+=p;save()}],['删除',()=>{if(confirm('确定删除学员 '+x.name+' 的档案？此操作无法撤销。')){students.splice(i,1);save()}}]].forEach(([text,fn])=>{const b=document.createElement('button');b.textContent=text;b.type='button';b.onclick=fn;actions.appendChild(b)});
-div.appendChild(actions);$('list').appendChild(div);
-});
+
+function normalizeStudent(x){
+  return {
+    ...x,
+    name:String(x.name||'未命名学员'),
+    phone:String(x.phone||''),
+    instrument:String(x.instrument||'电吉他'),
+    remaining:Math.max(0,Number(x.remaining)||0),
+    used:Math.max(0,Number(x.used)||0),
+    paid:Math.max(0,Number(x.paid)||0),
+    note:String(x.note||''),
+    history:Array.isArray(x.history)?x.history:[]
+  };
 }
+try{
+  const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');
+  students=Array.isArray(saved)?saved.map(normalizeStudent):[];
+}catch(e){
+  students=[];
+}
+function save(){
+  try{
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(students));
+    render();
+  }catch(e){
+    alert('保存失败：浏览器存储可能已满。请先导出备份。');
+  }
+}
+function render(){
+  $('total').textContent=students.length;
+  $('hours').textContent=students.reduce((s,x)=>s+x.remaining,0);
+  $('income').textContent='¥'+students.reduce((s,x)=>s+x.paid,0).toLocaleString('zh-CN',{maximumFractionDigits:2});
+  $('renew').textContent=students.filter(x=>x.remaining<=4).length;
+  const list=$('list');
+  list.replaceChildren();
+  if(!students.length){
+    list.innerHTML='<div class="empty">暂时还没有学员，请先添加。</div>';
+    return;
+  }
+  students.forEach((x,i)=>{
+    const div=document.createElement('div');
+    div.className='student';
+    const title=document.createElement('strong');
+    title.textContent=x.name+' · '+x.instrument;
+    div.appendChild(title);
+    const info=document.createElement('div');
+    info.className='muted';
+    info.textContent='电话：'+(x.phone||'未填写')+'｜剩余课时：'+x.remaining+'｜累计实收：¥'+x.paid+'｜已上课：'+x.used+' 节';
+    div.appendChild(info);
+    if(x.remaining<=4){
+      const tag=document.createElement('span');
+      tag.className='tag';
+      tag.textContent=x.remaining===0?'课时已用完，请先续费':'课时不足，请关注续费';
+      div.appendChild(tag);
+    }
+    if(x.note){
+      const note=document.createElement('div');
+      note.className='muted';
+      note.textContent='备注：'+x.note;
+      div.appendChild(note);
+    }
+
+    const actions=document.createElement('div');
+    actions.className='actions';
+    const addButton=(label,fn)=>{
+      const b=document.createElement('button');
+      b.type='button';b.textContent=label;b.addEventListener('click',fn);
+      actions.appendChild(b);
+    };
+    addButton('登记上课',()=>{
+      if(x.remaining<1){alert('剩余课时不足，请先续费。');return;}
+      const now=new Date();
+      const today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+      const date=prompt('请输入上课日期（YYYY-MM-DD）',today);
+      if(date===null)return;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())){
+        alert('日期格式不正确，请使用 YYYY-MM-DD，例如 2026-10-27。');return;
+      }
+      const content=prompt('请输入本次教学内容','例如：五声音阶、节奏训练、歌曲练习');
+      if(content===null)return;
+      if(!content.trim()){alert('教学内容不能为空，本次未扣课时。');return;}
+      if(!confirm('确认登记 '+x.name+' 上课一次？\n日期：'+date.trim()+'\n教学内容：'+content.trim()+'\n将扣减 1 课时。'))return;
+      if(!Array.isArray(x.history))x.history=[];
+      x.remaining-=1;
+      x.used=(Number(x.used)||0)+1;
+      x.history.unshift({
+        date:date.trim(),
+        content:content.trim(),
+        remainingAfter:x.remaining,
+        recordedAt:new Date().toISOString()
+      });
+      save();
+    });
+    addButton('续费加课',()=>{
+      const n=Number(prompt('请输入增加的课时数','16'));
+      if(!Number.isInteger(n)||n<=0)return;
+      const p=Number(prompt('请输入本次实收金额（元）','1688'));
+      if(!Number.isFinite(p)||p<0)return;
+      if(!confirm('确认续费 '+n+' 节，实收 ¥'+p+'？'))return;
+      x.remaining+=n;
+      x.paid+=p;
+      save();
+    });
+    addButton('删除',()=>{
+      if(confirm('确定删除学员 '+x.name+' 的档案及上课历史？此操作无法撤销。')){
+        students.splice(i,1);save();
+      }
+    });
+    div.appendChild(actions);
+
+    const history=document.createElement('details');
+    history.className='history';
+    const summary=document.createElement('summary');
+    summary.textContent='上课历史（'+x.history.length+'）';
+    history.appendChild(summary);
+    if(x.history.length){
+      x.history.forEach(record=>{
+        const item=document.createElement('div');
+        item.className='history-item';
+        const date=document.createElement('div');
+        date.className='history-date';
+        date.textContent=record.date||'未记录日期';
+        item.appendChild(date);
+        const lesson=document.createElement('div');
+        lesson.textContent='教学内容：'+(record.content||'未填写');
+        item.appendChild(lesson);
+        if(record.remainingAfter!==undefined){
+          const remaining=document.createElement('div');
+          remaining.textContent='本次课后剩余：'+record.remainingAfter+' 节';
+          item.appendChild(remaining);
+        }
+        history.appendChild(item);
+      });
+    }else{
+      const empty=document.createElement('div');
+      empty.className='history-empty';
+      empty.textContent='暂无上课记录。登记上课后，记录会显示在这里。';
+      history.appendChild(empty);
+    }
+    div.appendChild(history);
+    list.appendChild(div);
+  });
+}
+
 $('form').addEventListener('submit',e=>{
-e.preventDefault();
-const name=$('name').value.trim();const lessons=Number($('lessons').value);const paid=Number($('paid').value);
-if(!name||!Number.isInteger(lessons)||lessons<1||!Number.isFinite(paid)||paid<0){alert('请检查姓名、课时和收费金额');return}
-students.push({name,phone:$('phone').value.trim(),instrument:$('instrument').value,remaining:lessons,used:0,paid,note:$('note').value.trim()});
-save();e.target.reset();$('lessons').value=16;$('paid').value=1688;alert('学员已保存');
+  e.preventDefault();
+  const name=$('name').value.trim();
+  const lessons=Number($('lessons').value);
+  const paid=Number($('paid').value);
+  if(!name||!Number.isInteger(lessons)||lessons<1||!Number.isFinite(paid)||paid<0){
+    alert('请检查姓名、课时和收费金额。');return;
+  }
+  students.push(normalizeStudent({
+    name,phone:$('phone').value.trim(),instrument:$('instrument').value,
+    remaining:lessons,used:0,paid,note:$('note').value.trim(),history:[]
+  }));
+  save();
+  e.target.reset();
+  $('lessons').value=16;
+  $('paid').value=1688;
+  alert('学员已保存。');
+});
+
+$('exportBtn').addEventListener('click',()=>{
+  const backup={
+    app:'ROCKER 学员管理系统',
+    version:2,
+    exportedAt:new Date().toISOString(),
+    students:students
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='ROCKER-学员备份-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  alert('备份已生成。请确认已保存到 iPhone“文件”App。');
+});
+
+$('importBtn').addEventListener('click',()=>$('backupFile').click());
+$('backupFile').addEventListener('change',async e=>{
+  const file=e.target.files&&e.target.files[0];
+  if(!file)return;
+  try{
+    const parsed=JSON.parse(await file.text());
+    const imported=Array.isArray(parsed)?parsed:parsed.students;
+    if(!Array.isArray(imported))throw new Error('备份文件中没有学员数据。');
+    if(!imported.every(x=>x&&typeof x==='object'))throw new Error('备份文件格式不正确。');
+    if(!confirm('准备恢复 '+imported.length+' 位学员。当前浏览器中的数据将被替换，是否继续？')){
+      e.target.value='';return;
+    }
+    students=imported.map(normalizeStudent);
+    save();
+    alert('恢复成功，共恢复 '+students.length+' 位学员。');
+  }catch(err){
+    alert('恢复失败：'+err.message);
+  }
+  e.target.value='';
 });
 render();
 </script>
